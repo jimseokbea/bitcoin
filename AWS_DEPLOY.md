@@ -112,6 +112,25 @@ pm2 logs binance_bot
 
 ---
 
+### 3. Web Dashboard 실행 (New!)
+대시보드를 서버에서 24시간 켜두려면 다음 설정을 따르세요.
+
+**1. AWS 보안 그룹 설정 (필수)**
+*   AWS 콘솔 -> EC2 -> 보안 그룹 -> 인바운드 규칙 편집
+*   **규칙 추가**:
+    *   유형: `사용자 지정 TCP`
+    *   포트 범위: `8501`
+    *   소스: `Anywhere-IPv4` (0.0.0.0/0)
+
+**2. 대시보드 실행**
+```bash
+cd ~/bitcoin-main/MonsterBot
+pm2 start "streamlit run dashboard.py --server.port 8501 --server.address 0.0.0.0" --name "dashboard"
+```
+이제 인터넷 주소창에 `http://[내-EC2-IP]:8501` 입력하면 대시보드가 뜹니다!
+
+---
+
 ## 5. 유용한 명령어 (치트시트)
 
 | 행동 | 명령어 |
@@ -128,5 +147,6 @@ pm2 logs binance_bot
 ```bash
 cd ~/bitcoin-main
 git pull
+pip3 install streamlit  # 대시보드 기능 추가됨
 pm2 restart all
 ```
