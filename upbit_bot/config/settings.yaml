@@ -1,10 +1,10 @@
 upbit:
-  access_key: "rIv913MUA4aYxhNxEFGitkQajixnlKQrx6stvDml"
-  secret_key: "x3R2GblDbltJcyrWkzFxiY54uxqNtscwZGRxkxZO"
+  access_key: ""
+  secret_key: ""
 
 telegram:
-  bot_token: "8490220563:AAFCi5ubVxs-aZiaxTDkc15AgB0m-Ex8tH4"
-  chat_id: "8479877564"
+  bot_token: ""
+  chat_id: ""
 
 # New Score-Based Strategy Configuration
 bot:

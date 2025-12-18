@@ -375,7 +375,7 @@ def run_backtest(days=7, config_override=None):
     print(f"Final Balance:       {final_balance:.2f} USDT (Start: {total_initial})")
     print(f"Win Rate (Avg):      {win_rate:.2f}%")
     print("-" * 30)
-    print("🛡️ Compliance Check (Simulation)")
+    print("[Compliance Check] Simulation")
     # Since we simulate coins independently here (simplified mock), we cannot strictly check concurrent overlap
     # without a unified timeline replay.
     # However, we can assert that individual coin logic respected its own signals.
