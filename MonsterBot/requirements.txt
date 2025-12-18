@@ -1,0 +1,11 @@
+ccxt
+pandas
+pandas_ta
+python-dotenv
+pyyaml
+optuna
+termcolor
+python-telegram-bot
+streamlit
+plotly
+websocket-client

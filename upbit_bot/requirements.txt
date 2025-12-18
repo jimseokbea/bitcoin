@@ -1,0 +1,8 @@
+requests
+PyJWT
+numpy
+pyyaml
+pandas
+python-dateutil
+pyupbit
+pandas_ta

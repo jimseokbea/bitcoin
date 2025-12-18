@@ -1,0 +1,61 @@
+DEBUG: backtest.py imported
+Testing Backtest directly...
+DEBUG: run_backtest started
+Debug: Processing DOGE/USDT...
+Debug: Dataframe shape (3360, 6)
+Debug: Starting loop for DOGE/USDT, range 50 to 3360
+Debug: Processing SOL/USDT...
+Debug: Dataframe shape (3361, 6)
+Debug: Starting loop for SOL/USDT, range 50 to 3361
+Debug: Processing ETH/USDT...
+Debug: Dataframe shape (3361, 6)
+Debug: Starting loop for ETH/USDT, range 50 to 3361
+Traceback (most recent call last):
+  File "C:\Users\82106\AppData\Local\Packages\PythonSoftwareFoundation.Python.3.13_qbz5n2kfra8p0\LocalCache\local-packages\Python313\site-packages\pandas\core\indexes\base.py", line 3812, in get_loc
+    return self._engine.get_loc(casted_key)
+           ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^
+  File "pandas/_libs/index.pyx", line 167, in pandas._libs.index.IndexEngine.get_loc
+  File "pandas/_libs/index.pyx", line 196, in pandas._libs.index.IndexEngine.get_loc
+  File "pandas/_libs/hashtable_class_helper.pxi", line 7088, in pandas._libs.hashtable.PyObjectHashTable.get_item
+  File "pandas/_libs/hashtable_class_helper.pxi", line 7096, in pandas._libs.hashtable.PyObjectHashTable.get_item
+KeyError: 'adx'
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "C:\Users\82106\AppData\Local\Packages\PythonSoftwareFoundation.Python.3.13_qbz5n2kfra8p0\LocalCache\local-packages\Python313\site-packages\pandas\core\frame.py", line 4496, in _set_item_mgr
+    loc = self._info_axis.get_loc(key)
+  File "C:\Users\82106\AppData\Local\Packages\PythonSoftwareFoundation.Python.3.13_qbz5n2kfra8p0\LocalCache\local-packages\Python313\site-packages\pandas\core\indexes\base.py", line 3819, in get_loc
+    raise KeyError(key) from err
+KeyError: 'adx'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "C:\Users\82106\Desktop\bitcoin\MonsterBot\test_optim.py", line 13, in <module>
+    stats = run_backtest(days=7)
+  File "C:\Users\82106\Desktop\bitcoin\MonsterBot\backtest.py", line 305, in run_backtest
+    signal, sl_price = strategy.analyze(df_slice)
+                       ~~~~~~~~~~~~~~~~^^^^^^^^^^
+  File "C:\Users\82106\Desktop\bitcoin\MonsterBot\core\strategy.py", line 85, in analyze
+    df['adx'] = dx.rolling(window=14).mean()
+    ~~^^^^^^^
+  File "C:\Users\82106\AppData\Local\Packages\PythonSoftwareFoundation.Python.3.13_qbz5n2kfra8p0\LocalCache\local-packages\Python313\site-packages\pandas\core\frame.py", line 4322, in __setitem__
+    self._set_item(key, value)
+    ~~~~~~~~~~~~~~^^^^^^^^^^^^
+  File "C:\Users\82106\AppData\Local\Packages\PythonSoftwareFoundation.Python.3.13_qbz5n2kfra8p0\LocalCache\local-packages\Python313\site-packages\pandas\core\frame.py", line 4549, in _set_item
+    self._set_item_mgr(key, value, refs)
+    ~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^
+  File "C:\Users\82106\AppData\Local\Packages\PythonSoftwareFoundation.Python.3.13_qbz5n2kfra8p0\LocalCache\local-packages\Python313\site-packages\pandas\core\frame.py", line 4499, in _set_item_mgr
+    self._mgr.insert(len(self._info_axis), key, value, refs)
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\82106\AppData\Local\Packages\PythonSoftwareFoundation.Python.3.13_qbz5n2kfra8p0\LocalCache\local-packages\Python313\site-packages\pandas\core\internals\managers.py", line 1384, in insert
+    new_axis = self.items.insert(loc, item)
+  File "C:\Users\82106\AppData\Local\Packages\PythonSoftwareFoundation.Python.3.13_qbz5n2kfra8p0\LocalCache\local-packages\Python313\site-packages\pandas\core\indexes\base.py", line 7069, in insert
+    new_values = np.insert(arr, loc, casted)
+  File "C:\Users\82106\AppData\Local\Packages\PythonSoftwareFoundation.Python.3.13_qbz5n2kfra8p0\LocalCache\local-packages\Python313\site-packages\numpy\lib\_function_base_impl.py", line 5601, in insert
+    values = np.moveaxis(values, 0, axis)
+  File "C:\Users\82106\AppData\Local\Packages\PythonSoftwareFoundation.Python.3.13_qbz5n2kfra8p0\LocalCache\local-packages\Python313\site-packages\numpy\_core\numeric.py", line 1511, in moveaxis
+    for dest, src in sorted(zip(destination, source)):
+                     ~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^
+KeyboardInterrupt

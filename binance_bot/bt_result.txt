@@ -1,0 +1,1 @@
+BACKTEST: SOL/USDT (30 days)\nRisk/Trade: 2% | TP: 1%\n----------------------------------------\nStart: 1,600,000 KRW\nEnd:   1,525,603 KRW\nPnL:   -74,397 KRW (-4.6%)\n----------------------------------------\nTrades: 116 | W/L: 72/44\nWin Rate: 62.1%\nDaily Avg: -0.15%\nEst. to 1 eok: 3650 days (121.7 months)\n

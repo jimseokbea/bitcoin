@@ -1,0 +1,9 @@
+ccxt
+pandas
+pyyaml
+python-dotenv
+requests
+schedule
+colorlog
+optuna
+websocket-client

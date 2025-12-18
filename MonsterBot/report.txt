@@ -1,0 +1,6 @@
+==============================
+Initial Balance: 550 USDT
+Final Balance:   478.01 USDT
+Total Trades:    48
+Win Rate:        54.17%
+==============================

@@ -1,0 +1,51 @@
+upbit:
+  access_key: "rIv913MUA4aYxhNxEFGitkQajixnlKQrx6stvDml"
+  secret_key: "x3R2GblDbltJcyrWkzFxiY54uxqNtscwZGRxkxZO"
+
+telegram:
+  bot_token: "8490220563:AAFCi5ubVxs-aZiaxTDkc15AgB0m-Ex8tH4"
+  chat_id: "8479877564"
+
+# New Score-Based Strategy Configuration
+bot:
+  ticker: "KRW-DOGE"    # Default target (multi-coin logic handled in main)
+  timeframe: "minute5"  # 5분봉
+  markets: ["KRW-BTC", "KRW-ETH", "KRW-XRP", "KRW-SOL", "KRW-DOGE", "KRW-ADA", "KRW-AVAX", "KRW-SHIB", "KRW-ETC"]
+
+indicators:
+  bb: 
+    length: 20
+    std: 2.0
+  rsi:
+    length: 14
+    oversold: 40  # 35~40 유동적 (코드 로직 반영)
+  mfi:
+    length: 14
+    oversold: 35
+  volume:
+    spike_factor: 1.5
+
+weights:
+  bb_touch: 2.0      # BB 하단 터치
+  rsi_oversold: 1.5  # RSI 과매도
+  mfi_oversold: 1.5  # MFI 과매도
+  hammer: 2.5        # 해머 캔들 + 컨펌
+  volume_spike: 1.0  # 거래량 급등
+  btc_ok: 2.0        # BTC 장세 좋음 (필수 필터는 아님, 점수제)
+
+entry_threshold: 6.0   # 진입 점수 커트라인
+
+risk:
+  sl_atr_mult: 0.7     # ATR 손절 배수
+  sl_min_pct: 0.018    # 최소 손절 1.8%
+  tp_target: 0.012     # 1차 목표가 (1.2% - 가변적일 수 있음)
+  time_limit: 180      # 타임컷 (3시간)
+
+daily_risk:
+  max_loss_pct: 0.03   # 일일 손실 한도 3%
+
+position_sizing:
+  base_pct: 0.03       # 1회 진입 비중 (3%) - 50,000 KRW logic overrides this mostly but good for dynamic
+  min_size: 50000      # 최소 진입 금액
+  max_cap: 0.05        # 최대 비중 5%
+  cash_buf: 0.3        # 현금 버퍼 30%

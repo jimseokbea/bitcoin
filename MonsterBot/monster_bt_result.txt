@@ -1,0 +1,13 @@
+
+=== MonsterBot HybridStrategy ===
+Symbol: SOL/USDT | Days: 30
+Risk: 1.0%
+---------------------------------
+Start: 1,600,000 KRW
+End:   1,559,815 KRW
+PnL:   -40,185 KRW (-2.5%)
+---------------------------------
+Trades: 26 | W/L: 8/18
+Win Rate: 31%
+Daily Avg: -0.08%
+Daily negative - cannot reach target
