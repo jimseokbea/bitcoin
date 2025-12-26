@@ -1,12 +1,27 @@
 import copy
 import time
 import pandas as pd
-import pandas_ta as ta
+import ta as ta_lib  # Using ta library instead of pandas_ta
 import numpy as np
 from core.system_utils import LOGGER
 
 class StrategyTuner:
-# ... (init methods unchanged)
+    def __init__(self, config, enabled=True, tune_interval=300):
+        """
+        Initialize StrategyTuner.
+        
+        Args:
+            config: Base configuration dictionary
+            enabled: Whether tuner is enabled
+            tune_interval: Seconds between tune calls (default 5 minutes)
+        """
+        self.base_cfg = copy.deepcopy(config)
+        self.current_cfg = copy.deepcopy(config)
+        self.enabled = enabled
+        self.tune_interval = tune_interval
+        self.last_tune_ts = 0
+        self.mode = "Neutral"
+        self.last_mode_change_ts = 0
 
     def get_market_regime(self, df):
         """시장 데이터 기반 장세 판단 (데이터 부족 방어 포함)"""
@@ -16,25 +31,17 @@ class StrategyTuner:
         try:
             # 2. 지표 계산 (Missing Data Check & Calc)
             cols = df.columns
-            # BB Check
+            # BB Check - using ta library
             if 'bb_upper' not in cols:
-                # Calculate manually if missing
-                bb = ta.bbands(df['close'], length=20, std=2.0)
-                if bb is not None:
-                     # pandas_ta column naming: BBU_20_2.0, BBL_20_2.0
-                     # Dynamic finder
-                     bbu = [c for c in bb.columns if c.startswith("BBU")][0]
-                     bbl = [c for c in bb.columns if c.startswith("BBL")][0]
-                     df['bb_upper'] = bb[bbu]
-                     df['bb_lower'] = bb[bbl]
+                # Calculate Bollinger Bands using ta library
+                bb_indicator = ta_lib.volatility.BollingerBands(close=df['close'], window=20, window_dev=2)
+                df['bb_upper'] = bb_indicator.bollinger_hband()
+                df['bb_lower'] = bb_indicator.bollinger_lband()
             
-            # ADX Check
+            # ADX Check - using ta library
             if 'adx' not in cols:
-                adx_res = ta.adx(df['high'], df['low'], df['close'], length=14)
-                if adx_res is not None:
-                    # ADX_14
-                    adx_col = [c for c in adx_res.columns if c.startswith("ADX")][0]
-                    df['adx'] = adx_res[adx_col]
+                adx_indicator = ta_lib.trend.ADXIndicator(high=df['high'], low=df['low'], close=df['close'], window=14)
+                df['adx'] = adx_indicator.adx()
 
             if 'bb_upper' not in df.columns or 'adx' not in df.columns:
                  return "Neutral", 0, 0

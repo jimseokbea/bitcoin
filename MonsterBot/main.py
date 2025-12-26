@@ -72,7 +72,8 @@ def main():
     
     # Start WS Stream (if API key present)
     if os.getenv("BINANCE_API_KEY"):
-        ws_stream = BinanceFuturesUserStream(os.getenv("BINANCE_API_KEY"), state_store, logger)
+        # [Safety Pin C] WS Stream needs DB to log REALIZED trades for Fee Monitor
+        ws_stream = BinanceFuturesUserStream(os.getenv("BINANCE_API_KEY"), state_store, logger, db=TradeDB())
         ws_stream.start()
     
     gate = SignalGate(config, logger) # Initialize Gate
@@ -157,6 +158,12 @@ def main():
                 time.sleep(3600)
                 continue
 
+            # [Safety Pin C] Fee Monitor
+            if not risk_mgr.check_fee_ratio(db):
+                logger.warning("[Risk] High Fee Ratio Detected! Cooldown 1 hour...")
+                time.sleep(3600)
+                continue
+
             # 1.5 BTC Fuse Check
             btc_crash = risk_mgr.check_btc_crash(executor)
             if btc_crash:
@@ -233,7 +240,10 @@ def main():
 
                 # 리스크 계산
                 balance = executor.get_balance()
-                raw_qty = sizer.calc_qty(balance, ohlcv['close'].iloc[-1], sl_price)
+                
+                # [Safety Pin B] Pass ADX for Side Mode Risk
+                current_adx = ohlcv['adx'].iloc[-1] if 'adx' in ohlcv else None
+                raw_qty = sizer.calc_qty(balance, ohlcv['close'].iloc[-1], sl_price, adx=current_adx)
                 
                 # [Robust] Validate Qty
                 entry_price = ohlcv['close'].iloc[-1]

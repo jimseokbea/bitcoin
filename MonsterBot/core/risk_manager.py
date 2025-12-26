@@ -96,3 +96,49 @@ class RiskManager:
             return False
         except Exception:
             return False
+
+    def check_fee_ratio(self, db):
+        """
+        [Safety Pin C] Fee Monitor
+        Checks last 10 trades. If Fee / Gross_PnL > 30%, trigger cooldown.
+        """
+        try:
+            # Query last 10 filled trades (WS_FILL log)
+            db.cursor.execute("""
+                SELECT pnl, commission FROM trades 
+                WHERE strategy_type='WS_FILL' OR commission > 0
+                ORDER BY timestamp DESC LIMIT 10
+            """)
+            rows = db.cursor.fetchall()
+            
+            if not rows or len(rows) < 3: # Need at least 3 trades to judge
+                return True
+            
+            total_pnl = sum([abs(r[0]) for r in rows]) # Use absolute PnL (Activity base) or Net?
+            # User said: "Total PnL 중 수수료 비중"
+            # Usually means: Sum(Fees) / Sum(Gross Profit)? 
+            # Or Sum(Fees) / Sum(Abs(PnL))?
+            # Or Net PnL vs Fees?
+            # "총 PnL 중 수수료 비중" -> If I made 100 USDT, and fee was 30 USDT -> 30%.
+            # If I lost 100 USDT, fee is still positive.
+            # Let's use: Sum(Fees) / Sum(Abs(PnL) + Fees) ? 
+            # Or simply: Sum(Fees) vs Net PnL?
+            # Interpretation: If trading burns too much fee relative to outcome.
+            # Let's use: Sum(Fees) / Sum(Abs(Realized_PnL))
+            
+            total_comm = sum([abs(r[1]) for r in rows])
+            total_abs_pnl = sum([abs(r[0]) for r in rows]) # Absolute movement captured
+            
+            if total_abs_pnl == 0: return True
+            
+            ratio = total_comm / total_abs_pnl
+            
+            if ratio > 0.30:
+                logger.warning(f"🚨 [Fee Monitor] High Fee Ratio: {ratio*100:.1f}% > 30% (Last {len(rows)} trades). Cooldown triggered.")
+                return False
+                
+            return True
+            
+        except Exception as e:
+            logger.error(f"Fee Monitor Error: {e}")
+            return True

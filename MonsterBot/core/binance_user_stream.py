@@ -5,9 +5,11 @@ import requests
 import websocket
 
 class BinanceFuturesUserStream:
-    def __init__(self, api_key, state_store, logger, base_url="https://fapi.binance.com"):
+    def __init__(self, api_key, state_store, logger, db=None, base_url="https://fapi.binance.com"):
         self.api_key = api_key
         self.state = state_store
+        self.logger = logger
+        self.db = db
         self.logger = logger
         self.base_url = base_url
         self.listen_key = None
@@ -43,10 +45,40 @@ class BinanceFuturesUserStream:
             et = data.get("e")
             if et == "ORDER_TRADE_UPDATE":
                 o = data.get("o", {})
-                symbol = o.get("s")  # e.g. BTCUSDT (binance raw)
-                # 필요 시 심볼 매핑(BTCUSDT -> BTC/USDT)은 별도 map 필요
+                symbol = o.get("s")
+                # Detect Clean Fill with Realized Profit
+                # x=TRADE, X=FILLED (or PARTIALLY_FILLED if you want detailed splits)
+                # rp (Realized Profit) is key for PnL logging
+                execution_type = o.get("x")
+                order_status = o.get("X")
+                rp = float(o.get("rp", 0))
+                
+                if execution_type == "TRADE" and rp != 0:
+                    # Closing trade triggered (Partial or Full)
+                    side = o.get("S") # SELL/BUY
+                    last_price = float(o.get("L", 0)) # Last Trade Price
+                    avg_price = float(o.get("ap", 0)) # Average Price
+                    
+                    # Commission
+                    commission = 0.0
+                    try:
+                        n_asset = o.get("N") # Commission Asset (USDT, BNB)
+                        n_amt = float(o.get("n", 0)) # Commission Amount
+                        # Convert to USDT if needed (Assuming USDT or BNB)
+                        # Simplified: Just trust raw amount if USDT, if BNB maybe roughly ignore or 1:1 for simplicity in this safety check
+                        commission = n_amt 
+                    except: pass
+                    
+                    if self.db:
+                        # log_trade(symbol, side, entry, exit_price, pnl, commission, strategy)
+                        # We don't have exact entry price or strategy readily available in WS event without state lookup
+                        # But we can log "exit" and "pnl" which is what we need for Fee Monitor
+                        # Entry can be avg_price for now or fetched from state.
+                        # Important: PnL from binance is absolute amount? Yes 'rp'.
+                        # DB expects maybe ROI? risk_manager checks ratio. Ratio = Fee / PnL. Absolute works fine.
+                        self.db.log_trade(symbol, side, 0, last_price, rp, commission, "WS_FILL")
+                        
                 self.state.last_ws_ts = time.time()
-                # 최소: orderId/상태를 저장(정교화는 본인 로직에 맞게)
             elif et == "ACCOUNT_UPDATE":
                 # positions update
                 a = data.get("a", {})

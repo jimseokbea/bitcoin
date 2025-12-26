@@ -7,9 +7,10 @@ class PositionSizer:
         self.risk_pct = config['risk']['risk_per_trade']
         self.max_lev = config['risk']['max_leverage']
 
-    def calc_qty(self, equity, entry_price, stop_price):
+    def calc_qty(self, equity, entry_price, stop_price, adx=None):
         """
         Calculates position size based on risk percentage and stop loss distance.
+        [Safety Pin B] Side Mode Risk Cap: If ADX < 25, reduce risk to 60%.
         """
         try:
             if equity <= 0: return 0.0
@@ -21,6 +22,12 @@ class PositionSizer:
             # [Sniper Mode Sizing]
             # 1. Risk Amount (Strict 0.7%)
             risk_ratio = 0.007
+            
+            # [Safety Pin B] Side Mode (Range) Check
+            if adx is not None and adx < 25:
+                # logger.info(f"🛡️ [Side Mode] Low ADX ({adx:.1f}) -> Reducing Risk to 0.6x")
+                risk_ratio *= 0.6
+            
             risk_amt = equity * risk_ratio
             
             # 2. SL Distance %

@@ -8,44 +8,90 @@ telegram:
 
 # New Score-Based Strategy Configuration
 bot:
-  ticker: "KRW-DOGE"    # Default target (multi-coin logic handled in main)
-  timeframe: "minute5"  # 5분봉
-  markets: ["KRW-BTC", "KRW-ETH", "KRW-XRP", "KRW-SOL", "KRW-DOGE", "KRW-ADA", "KRW-AVAX", "KRW-SHIB", "KRW-ETC"]
+  ticker: "KRW-DOGE"        # Default target (multi-coin logic handled in main)
+  timeframe: "minute5"      # 5분봉
+  markets:
+    ["KRW-BTC", "KRW-ETH", "KRW-XRP", "KRW-SOL", "KRW-DOGE", "KRW-ADA", "KRW-AVAX", "KRW-SHIB", "KRW-ETC"]
 
 indicators:
-  bb: 
+  bb:
     length: 20
-    std: 2.0
+    std: 2.4                # Stage 1: 2.8 -> 2.4
   rsi:
     length: 14
-    oversold: 40  # 35~40 유동적 (코드 로직 반영)
+    oversold: 40            # 35~40 유동적
   mfi:
     length: 14
     oversold: 35
   volume:
-    spike_factor: 1.5
+    spike_factor: 1.7       # Stage 1: 2.0x -> 1.7x
 
 weights:
-  bb_touch: 2.0      # BB 하단 터치
-  rsi_oversold: 1.5  # RSI 과매도
-  mfi_oversold: 1.5  # MFI 과매도
-  hammer: 2.5        # 해머 캔들 + 컨펌
-  volume_spike: 1.0  # 거래량 급등
-  btc_ok: 2.0        # BTC 장세 좋음 (필수 필터는 아님, 점수제)
+  bb_touch: 2.0             # BB 하단 터치
+  rsi_oversold: 1.5         # RSI 과매도
+  mfi_oversold: 1.5         # MFI 과매도
+  hammer: 2.5               # 해머 캔들 + 컨펌
+  volume_spike: 1.0         # 거래량 급등
+  btc_ok: 2.0               # BTC 장세 좋음 (필수 필터는 아님, 점수제)
 
-entry_threshold: 6.0   # 진입 점수 커트라인
+entry_threshold: 6.0        # 진입 점수 커트라인
 
 risk:
-  sl_atr_mult: 0.7     # ATR 손절 배수
-  sl_min_pct: 0.018    # 최소 손절 1.8%
-  tp_target: 0.012     # 1차 목표가 (1.2% - 가변적일 수 있음)
-  time_limit: 180      # 타임컷 (3시간)
+  sl_atr_mult: 0.7          # ATR 손절 배수
+  sl_min_pct: 0.018         # 최소 손절 1.8%
+  tp_target: 0.012          # 1차 목표가 1.2% (부분 익절)
+  time_limit: 180           # 타임컷 (3시간)
+  min_volatility_pct: 0.005 # 최소 변동성 (0.5%) 미만 진입 금지
 
 daily_risk:
-  max_loss_pct: 0.03   # 일일 손실 한도 3%
+  max_loss_pct: 0.03        # 일일 손실 한도 3%
 
 position_sizing:
-  base_pct: 0.03       # 1회 진입 비중 (3%) - 50,000 KRW logic overrides this mostly but good for dynamic
-  min_size: 50000      # 최소 진입 금액
-  max_cap: 0.05        # 최대 비중 5%
-  cash_buf: 0.3        # 현금 버퍼 30%
+  base_pct: 0.15            # 1회 진입 비중 (15%)
+  min_size: 50000           # 최소 진입 금액
+  max_cap: 0.20             # 단일 포지션 최대 비중
+  max_total_exposure_pct: 0.35 # [NEW] 전체 자산 대비 총 노출 상한 (35%)
+  cash_buf: 0.3             # 현금 버퍼 30%
+
+# -----------------------------
+# Stage 1: Trade Frequency Control (Gate)
+# -----------------------------
+gate:
+  min_minutes_between_entries: 90    # Cooldown 90분 (2h → 1.5h)
+  max_trades_per_day: 5              # 하루 진입 제한 (3 → 5회)
+  max_open_positions: 2              # 동시 보유 제한 (유지)
+
+# -----------------------------
+# Safety Pins (Mandatory)
+# -----------------------------
+safety_pins:
+  # Side Mode Risk Down: 횡보장 감지 시 리스크 0.6x
+  side_mode:
+    enabled: true
+    adx_period: 14
+    adx_side_threshold: 25
+    side_risk_mult: 0.6
+
+  # Fee Monitor: 최근 10개 트레이드 기준 Fees가 Gross PnL의 30%를 넘으면 쿨다운 트리거
+  fee_monitor:
+    enabled: true
+    window_trades: 10
+    max_fee_ratio: 0.30
+    cooldown_minutes_on_trigger: 120
+
+  # Trend Acceleration Switch (Option 1)
+  # ADX >= 30 (Strong Trend) -> Size 20%, TP 2.0%
+  trend_boost:
+    enabled: true
+    adx_threshold: 30
+    boost_size_pct: 0.20
+    boost_tp_target: 0.02
+
+# -----------------------------
+# BTC Filter (Gate Mode)
+# -----------------------------
+btc_filter:
+  enabled: true
+  mode: "gate"          # gate or score
+  min_trend_score: 1    # 단순 하락만 아니면 통과 (MarketFilter 로직 참조)
+

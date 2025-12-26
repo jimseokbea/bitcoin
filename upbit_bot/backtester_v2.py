@@ -1,120 +1,269 @@
 import yaml
 import pandas as pd
-import pyupbit
+import sys
+import os
 import time
-from core.strategy_modules import SignalEngine, RiskEngine
+# Add project root to sys.path
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+
+from core.strategy_modules import SignalEngine
 
 def run_backtest():
     # 1. Load Config
-    with open("config/settings.yaml", "r", encoding="utf-8") as f:
+    config_path = os.path.join(os.path.dirname(__file__), "config", "settings.yaml")
+    with open(config_path, "r", encoding="utf-8") as f:
         config = yaml.safe_load(f)
 
     # 2. Initialize Engines
+    # SignalEngine expects config dict
     signal_engine = SignalEngine(config)
     
     # 3. Load Data
-    ticker = config['bot']['ticker']
-    interval = config['bot']['timeframe']
-    print(f"Fetching data for {ticker} ({interval})...")
+    # Use the CSV path from config or default to found candles
+    # config['backtest']['csv_path'] might be outdated, let's use the one found earlier
+    csv_path = "upbit_bot/data/candles/btc-5m-202206-luna-crash.csv" 
+    # Or try to load specific ticker data if available?
+    # User had btc-5m data. Let's use that for testing BTC strategy or assume logic holds.
+    # But settings says ticker: KRW-DOGE. We only have BTC data in the context.
+    # Let's use the BTC data for verification.
     
-    # Backtest with recent 4000 candles (approx 14 days)
-    df = pyupbit.get_ohlcv(ticker, interval=interval, count=4000)
-    
-    if df is None:
-        print("Failed to fetch data.")
+    print(f"Loading data from {csv_path}...")
+    if not os.path.exists(csv_path):
+        print(f"Error: {csv_path} not found.")
         return
 
-    # 4. Analyze
-    # For backtest, we need to iterate row by row or apply rolling functions.
-    # SignalEngine accepts a dataframe and analyzes the *last* row usually.
-    # But for backtest, we modify it to analyze historical rows.
-    # We will simulate the loop.
+    df = pd.read_csv(csv_path)
+    # Ensure columns match (pyupbit/ccxt standard)
+    # File has: timestamp,date_kst,open,high,low,close,volume
+    df.rename(columns={'timestamp': 'date'}, inplace=True) # or keep index
+    # We rely on indices mainly or SignalEngine might expect specific cols.
+    # SignalEngine uses: close, high, low, volume, open. All present (lowercase).
     
-    trades = []
-    position = None # { 'entry_price': ..., 'sl': ..., 'tp': ..., 'entry_time': ... }
-    
-    # Pre-calculate indicators for speed (SignalEngine internal method does this but for single use)
-    # We will use the engines _add_indicators on the full dataframe first.
+    # 4. Analyze Pre-calculation
+    print("Calculating indicators...")
+    # SignalEngine._add_indicators returns a new DF with indicators
     df_analyzed = signal_engine._add_indicators(df.copy())
     
-    # Iterate
-    # Start from index 30 to have enough data for indicators
-    for i in range(30, len(df_analyzed) - 1):
-        curr_row = df_analyzed.iloc[i]   # "Analysis time"
-        next_row = df_analyzed.iloc[i+1] # "Execution time" (open of next candle)
+    # 5. Iteration
+    trades = []
+    # Position: { 'entry_price': ..., 'sl': ..., 'tp': ..., 'size': ..., 'partial_sold': False, 'highest_price': ... }
+    position = None 
+    
+    initial_balance = 100000000 # 100M KRW start
+    balance = initial_balance
+    
+    print("Running Loop...")
+    # Full data for crash stress test
+    start_idx = 50 
+    print(f"Running full LUNA crash data (~1 month).")
+    
+    for i in range(start_idx, len(df_analyzed) - 1):
+        curr_row = df_analyzed.iloc[i]   # Signal Time
+        next_row = df_analyzed.iloc[i+1] # Execution Time (Open) / Monitor Time (High/Low)
         
-        # Current time price (Close of analysis candle)
         current_price = curr_row['close']
-        current_time = curr_row.name
         
-        # --- EXIT LOGIC ---
+        # --- EXIT LOGIC (simulated on next candle OHLC) ---
         if position:
-            # Check Low/High of NEXT candle for SL/TP hits??
-            # Usually we check if price moved against us in the holding period.
-            # Simplified: Check against next candle's High/Low
+            # Update Highest Logic (Trailing Check)
+            if position.get('partial_sold'):
+                if next_row['high'] > position['highest_price']:
+                    position['highest_price'] = next_row['high']
             
-            # 1. SL check (Low)
+            pnl_amt = 0
+            fee_amt = 0
+            exit_type = None
+            
+            # Order of checks: Low (SL) -> High (TP) assumption or vice versa?
+            # Conservative: Check Low first (Stop Loss)
+            
+            # 1. SL Check
             if next_row['low'] <= position['sl']:
-                pnl = (position['sl'] - position['entry_price']) / position['entry_price']
-                trades.append({'type': 'SL', 'pnl': pnl, 'days': next_row.name})
-                position = None
-                continue # Trade ended
-
-            # 2. TP check (High)
-            if next_row['high'] >= position['tp']:
-                pnl = (position['tp'] - position['entry_price']) / position['entry_price']
-                trades.append({'type': 'TP', 'pnl': pnl, 'days': next_row.name})
+                exit_price = position['sl']
+                # But if Open was already below SL, we slipped.
+                if next_row['open'] < position['sl']:
+                    exit_price = next_row['open']
+                
+                exit_type = "SL_BreakEven" if position['partial_sold'] else "StopLoss"
+                
+                # Execute Sell
+                size = position['size']
+                sell_val = size * exit_price
+                fee = sell_val * 0.0005
+                pnl = sell_val - (size * position['entry_price']) # Gross PnL
+                
+                balance += (sell_val - fee)
+                trades.append({
+                    'type': exit_type,
+                    'entry': position['entry_price'],
+                    'exit': exit_price,
+                    'pnl_pct': (exit_price - position['entry_price'])/position['entry_price'],
+                    'realized_pnl': (sell_val - fee) - (size * position['entry_price']) # Net PnL (approx)
+                })
                 position = None
                 continue
 
-            # 3. Time limit check (using index or time)
-            # if (next_row.name - position['entry_time']) ...
-            pass
-        
+            # 2. TP Check (Partial 50%)
+            if not position['partial_sold'] and next_row['high'] >= position['tp']:
+                tp_price = position['tp']
+                # If Open > TP, we might get open price
+                if next_row['open'] > position['tp']:
+                    tp_price = next_row['open']
+                
+                # Sell 50%
+                sold_size = position['size'] * 0.5
+                position['size'] -= sold_size
+                position['partial_sold'] = True
+                position['highest_price'] = tp_price
+                # Move SL to Entry (Break Even) + Buffer
+                position['sl'] = position['entry_price'] * 1.002
+                
+                sell_val = sold_size * tp_price
+                fee = sell_val * 0.0005
+                balance += (sell_val - fee)
+                
+                trades.append({
+                    'type': "Partial_TP",
+                    'entry': position['entry_price'],
+                    'exit': tp_price,
+                    'pnl_pct': (tp_price - position['entry_price'])/position['entry_price'],
+                    'realized_pnl': (sell_val - fee) - (sold_size * position['entry_price'])
+                })
+                # Don't continue, keep holding remainder
+
+            # 3. Trailing Stop Check (Only if partial sold)
+            if position.get('partial_sold'):
+                # 1.5% drop from highest
+                trail_price = position['highest_price'] * (1 - 0.015)
+                
+                # if High reached new max, we updated highest_price.
+                # Check if Low hit trail_price
+                if next_row['low'] <= trail_price:
+                    exit_price = trail_price
+                    if next_row['open'] < trail_price: 
+                        exit_price = next_row['open']
+                        
+                    exit_type = "TrailingStop"
+                    
+                    size = position['size']
+                    sell_val = size * exit_price
+                    fee = sell_val * 0.0005
+                    balance += (sell_val - fee)
+                    
+                    trades.append({
+                        'type': exit_type,
+                        'entry': position['entry_price'],
+                        'exit': exit_price,
+                        'pnl_pct': (exit_price - position['entry_price'])/position['entry_price'],
+                        'realized_pnl': (sell_val - fee) - (size * position['entry_price'])
+                    })
+                    position = None
+                    continue
+
         # --- ENTRY LOGIC ---
-        # Analyze current row to see if we should enter at next open
         if position is None:
-            # We need to construct a "row" that looks like what SignalEngine expects
-            # SignalEngine expects a row with 'prev_*' columns.
-            # Our df_analyzed ALREADY has prev_* columns shifted.
-            # So passing curr_row to calculate_score should work if inputs match.
+            # OPTIMIZATION: Do not call signal_engine.analyze() which recalculates indicators!
+            # Use pre-calculated curr_row.
             
-            score, details = signal_engine.calculate_score(curr_row, btc_ok=True)
+            # 1. Min Volatility Filter
+            min_vol_pct = config['risk'].get('min_volatility_pct', 0.0)
+            atr = curr_row['atr']
+            if (atr / current_price) < min_vol_pct:
+                continue
+
+            # 2. BTC Gate Check (Simulated Always True or passed)
+            btc_ok = True 
+            
+            score, details = signal_engine.calculate_score(curr_row, btc_ok=btc_ok)
             
             if score >= config['entry_threshold']:
                 # ENTER at Next Open
                 entry_price = next_row['open']
-                atr = curr_row['atr']
                 
                 # SL/TP Calculation
-                # Re-using logic from SignalEngine/RiskEngine or calculating here manually based on config
                 risk_cfg = config['risk']
-                sl_amt = max(entry_price * risk_cfg['sl_min_pct'], atr * risk_cfg['sl_atr_mult'])
+                sl_min_pct = risk_cfg['sl_min_pct']
+                sl_atr_mult = risk_cfg['sl_atr_mult']
+                sl_amt = max(entry_price * sl_min_pct, atr * sl_atr_mult)
                 sl_price = entry_price - sl_amt
-                tp_price = entry_price * (1 + risk_cfg['tp_target'])
+                
+                # TP = 1.2% (Initial Target)
+                tp_target = risk_cfg['tp_target']
+                tp_price = entry_price * (1 + tp_target)
+                
+                # Side Mode Size Adjustment
+                base_pct = config['position_sizing']['base_pct']
+                allocation = balance * base_pct
+                
+                adx = curr_row.get('adx', 25) # Use pre-calc ADX
+                
+                # "Side Mode" Logic
+                side_cfg = config['safety_pins']['side_mode']
+                # Manual Check
+                if side_cfg['enabled'] and (adx < side_cfg['adx_side_threshold']):
+                     allocation *= side_cfg['side_risk_mult']
+                
+                # [NEW] Trend Boost Logic
+                trend_cfg = config['safety_pins'].get('trend_boost', {})
+                if trend_cfg.get('enabled', False) and (adx >= trend_cfg['adx_threshold']):
+                     # Boost Size
+                     boost_size = balance * trend_cfg['boost_size_pct']
+                     # Max Cap Check
+                     max_cap_amt = balance * config['position_sizing']['max_cap']
+                     boost_size = min(boost_size, max_cap_amt)
+                     if boost_size > allocation:
+                         allocation = boost_size
+                         # Boost TP
+                         tp_target = trend_cfg['boost_tp_target']
+                         tp_price = entry_price * (1 + tp_target)
+                         # print(f"🚀 Trend Boost: ADX {adx:.1f} Size {allocation:,.0f} TP {tp_target*100}%")
+
+                if allocation < 5000: continue # Min limit
+                
+                buy_size = allocation / entry_price
+                fee = allocation * 0.0005
+                balance -= (allocation + fee)
                 
                 position = {
                     'entry_price': entry_price,
                     'sl': sl_price,
                     'tp': tp_price,
-                    'entry_time': next_row.name
+                    'size': buy_size,
+                    'partial_sold': False,
+                    'highest_price': entry_price
                 }
-                # print(f"[{next_row.name}] BUY @ {entry_price} (Score: {score:.1f} {details})")
+                # print(f"[{next_row['date']}] BUY {entry_price:.0f} (Score:{score} ADX:{adx:.1f})")
 
-    # 5. Results
+    # 6. Report
+    print(f"\n=== Backtest Report ===")
+    print(f"Period: {df_analyzed['date'].iloc[0]} ~ {df_analyzed['date'].iloc[-1]}")
+    print(f"Start Balance: {initial_balance:,.0f}")
+    print(f"End Balance:   {balance:,.0f}")
+    
+    # Positions still open?
+    if position:
+        val = position['size'] * df_analyzed.iloc[-1]['close']
+        balance += val
+        print(f"End Equity:    {balance:,.0f} (Open Pos Valued)")
+    
+    total_ret = (balance - initial_balance) / initial_balance * 100
+    print(f"Total Return:  {total_ret:.2f}%")
+    print(f"Total Trades:  {len(trades)}")
+    
+    wins = [t for t in trades if t['pnl_pct'] > 0]
     if trades:
-        win = len([t for t in trades if t['pnl'] > 0])
-        total = len(trades)
-        acc = win / total * 100
-        cum_pnl = sum([t['pnl'] for t in trades]) * 100
+        wr = len(wins) / len(trades) * 100
+        print(f"Win Rate:      {wr:.2f}%")
         
-        print(f"=== Backtest Results ({ticker}) ===")
-        print(f"Total Trades: {total}")
-        print(f"Win Rate: {acc:.2f}%")
-        print(f"Cumulative PnL: {cum_pnl:.2f}% (No Compounding)")
-        print("Last 5 Trades:", trades[-5:])
-    else:
-        print("No trades generated.")
+        # Breakdown by exit type
+        types = set(t['type'] for t in trades)
+        for t in types:
+            cnt = len([x for x in trades if x['type'] == t])
+            print(f" - {t}: {cnt}")
+            
+    # Save trades to csv
+    pd.DataFrame(trades).to_csv("upbit_bot/backtest_trades.csv", index=False)
+    print("Trades saved to upbit_bot/backtest_trades.csv")
 
 if __name__ == "__main__":
     run_backtest()

@@ -26,20 +26,27 @@ class TradeDB:
                     entry_price REAL,
                     exit_price REAL,
                     pnl REAL,
+                    commission REAL,
                     strategy_type TEXT
                 )
             ''')
+            # Migration check: Add commission column if missing (simple check)
+            try:
+                self.cursor.execute("SELECT commission FROM trades LIMIT 1")
+            except sqlite3.OperationalError:
+                self.cursor.execute("ALTER TABLE trades ADD COLUMN commission REAL DEFAULT 0")
+            
             self.conn.commit()
         except Exception as e:
             logger.error(f"DB Init Error: {e}")
 
-    def log_trade(self, symbol, side, entry, exit_price, pnl, strategy):
+    def log_trade(self, symbol, side, entry, exit_price, pnl, commission, strategy):
         try:
             timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
             self.cursor.execute('''
-                INSERT INTO trades (timestamp, symbol, side, entry_price, exit_price, pnl, strategy_type)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
-            ''', (timestamp, symbol, side, entry, exit_price, pnl, strategy))
+                INSERT INTO trades (timestamp, symbol, side, entry_price, exit_price, pnl, commission, strategy_type)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            ''', (timestamp, symbol, side, entry, exit_price, pnl, commission, strategy))
             self.conn.commit()
             logger.info(f"💾 Trade Saved to DB: {symbol} PnL: {pnl:.2f}%")
         except Exception as e:

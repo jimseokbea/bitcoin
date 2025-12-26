@@ -52,14 +52,14 @@ strategy: # Mapped 'signal' to 'strategy' for compatibility with existing code
   tf: "5m"
   adx_threshold: 25           # [Relaxed] 25 (More Trades)
   bb_len: 30
-  bb_std: 2.8                 # [Super-Sniper] 2.8 Strict
-  bb_factor: 2.8              # Compatibility
+  bb_std: 2.4                 # [Stage 1] 2.4 (Relaxed from 2.8)
+  bb_factor: 2.4              # Compatibility
   rsi_period: 14
   rsi_entry: 32               # [Tight Sniper] 32
   rsi_oversold: 32            # Compatibility
   rsi_overbought: 68          # Compatibility
-  vol_spike_mult: 2.0         # [Relaxed] 2x
-  volume_factor: 2.0          # Compatibility
+  vol_spike_mult: 1.7         # [Stage 1] 1.7x (Relaxed from 2.0)
+  volume_factor: 1.7          # Compatibility
   confirm_close: true         # 돌파는 '종가 확정 후' 다음 봉에서만 진입
   
   # Pyramiding (Keeping it but disabling if Sniper logic prefers single shot, User didn't specify pyramiding in Final Config, so I will disable or keep conservative)
@@ -69,8 +69,8 @@ strategy: # Mapped 'signal' to 'strategy' for compatibility with existing code
 
 gate:
   enabled: true
-  max_trades_per_day: 2       # ✅ 하루 1~2발 강제
-  min_minutes_between_entries: 360   # 6시간 쿨다운 (필수)
+  max_trades_per_day: 3       # ✅ [Safety] Haru 3-bal Limit
+  min_minutes_between_entries: 120   # [Stage 1] 2h Cooldown
   require_new_setup: true     # 동일 심볼 재진입은 새로운 셋업 발생 시만
   session_filter:
     enabled: true

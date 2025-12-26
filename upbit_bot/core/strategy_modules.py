@@ -1,5 +1,5 @@
 import pandas as pd
-import pandas_ta as ta
+# import pandas_ta as ta (Lazy import inside methods to avoid dependency issues)
 import logging
 from typing import Dict, Any, Tuple, Optional
 
@@ -51,27 +51,35 @@ class SignalEngine:
         if len(df) < 30: return df
 
         # 1. Bollinger Bands
-        bb = ta.bbands(df['close'], length=self.ind_cfg['bb']['length'], std=self.ind_cfg['bb']['std'])
-        if bb is not None:
-             # Find column starting with BBL (Robust way)
-             bbl_cols = [c for c in bb.columns if c.startswith("BBL")]
-             if bbl_cols:
-                 df['bb_lower'] = bb[bbl_cols[0]]
-             else:
-                 df['bb_lower'] = 0
-        else:
-             df['bb_lower'] = 0
+        # ta.volatility.BollingerBands
+        from ta.volatility import BollingerBands, AverageTrueRange
+        from ta.momentum import RSIIndicator
+        from ta.volume import MFIIndicator
+        
+        # BB
+        bb_indicator = BollingerBands(close=df['close'], window=self.ind_cfg['bb']['length'], window_dev=self.ind_cfg['bb']['std'])
+        df['bb_lower'] = bb_indicator.bollinger_lband()
         
         # 2. RSI
-        df['rsi'] = ta.rsi(df['close'], length=self.ind_cfg['rsi']['length'])
+        rsi_indicator = RSIIndicator(close=df['close'], window=self.ind_cfg['rsi']['length'])
+        df['rsi'] = rsi_indicator.rsi()
         
         # 3. MFI
-        df['mfi'] = ta.mfi(df['high'], df['low'], df['close'], df['volume'], length=self.ind_cfg['mfi']['length'])
+        mfi_indicator = MFIIndicator(high=df['high'], low=df['low'], close=df['close'], volume=df['volume'], window=self.ind_cfg['mfi']['length'])
+        df['mfi'] = mfi_indicator.money_flow_index()
         
         # 4. ATR (손절용)
-        df['atr'] = ta.atr(df['high'], df['low'], df['close'], length=14)
-        
-        # 5. 거래량 평균 (20개)
+        atr_indicator = AverageTrueRange(high=df['high'], low=df['low'], close=df['close'], window=14)
+        df['atr'] = atr_indicator.average_true_range()
+
+        # 5. ADX (추세 강도용 - Side Mode) using config
+        adx_len = self.cfg.get('safety_pins', {}).get('side_mode', {}).get('adx_period', 14)
+        from ta.trend import ADXIndicator
+        # ADXIndicator returns series by default accessors
+        adx_ind = ADXIndicator(high=df['high'], low=df['low'], close=df['close'], window=adx_len)
+        df['adx'] = adx_ind.adx()
+
+        # 6. 거래량 평균 (20개)
         df['vol_ma'] = df['volume'].rolling(20).mean()
 
         # 6. Hammer 패턴 인식 
@@ -136,13 +144,14 @@ class SignalEngine:
             score += self.w.get('volume_spike', 0)
             details.append("Vol")
 
-        # (6) BTC 필터
+        # (6) BTC 필터 (만약 Gate 모드가 아닌 Score 모드일 경우 가산점)
+        # Gate Mode는 analyze 함수 레벨에서 Hard Cut 하므로 여기선 "BTC OK" 상태면 점수 줌 (Score 모드 호환)
         if btc_ok:
             score += self.w.get('btc_ok', 0)
             details.append("BTC_OK")
         
         return score, details
-
+    
     def analyze(self, df: pd.DataFrame, btc_ok=True) -> Tuple[bool, float, float, Dict]:
         """
         return: (Signal(Bool), SL Price, TP Price, InfoDict)
@@ -151,15 +160,31 @@ class SignalEngine:
         
         # 마지막 캔들(현재 진행중)만 확인
         row = df.iloc[-1]
+
+        # --- A. Min Volatility Filter ---
+        min_vol_pct = self.cfg.get('risk', {}).get('min_volatility_pct', 0.0)
+        current_price = row['close']
+        atr = row['atr']
+        
+        if (atr / current_price) < min_vol_pct:
+            return False, 0.0, 0.0, {
+                "score": 0, "details": ["LowVolatility"], 
+                "atr": atr, "current_price": current_price, "adx": row.get('adx', 0)
+            }
+
+        # --- B. BTC Gate Filter Check ---
+        # config에 'btc_filter'가 있고 mode가 'gate'인데 btc_ok가 False면 -> 무조건 False 리턴
+        btc_filter_cfg = self.cfg.get('btc_filter', {})
+        if btc_filter_cfg.get('enabled', False) and btc_filter_cfg.get('mode') == 'gate':
+            if not btc_ok:
+                return False, 0.0, 0.0, {
+                    "score": 0, "details": ["BTC_Gate_Block"], 
+                    "atr": atr, "current_price": current_price, "adx": row.get('adx', 0)
+                }
         
         score, details = self.calculate_score(row, btc_ok)
         
         is_buy = (score >= self.entry_threshold)
-        
-        # SL/TP 계산 (ATR 기반)
-        # Entry price는 현재가(시장가)로 가정
-        current_price = row['close']
-        atr = row['atr']
         
         risk_cfg = self.cfg['risk']
         
@@ -168,15 +193,14 @@ class SignalEngine:
         sl_price = current_price - sl_amt
         
         # TP = 진입가 + (손절폭 * 1.5) or fixed 1.2%
-        # User requested 1.2% target in example or RR based
-        # Using snippet: tp_target: 0.012
         tp_price = current_price * (1 + risk_cfg['tp_target'])
         
         info = {
             "score": score,
             "details": details,
             "atr": atr,
-            "current_price": current_price
+            "current_price": current_price,
+            "adx": row.get('adx', 0) # ADX 전달
         }
         
         return is_buy, sl_price, tp_price, info
