@@ -47,27 +47,42 @@ class UpbitAPIWrapper:
         try:
             # KRW Balance
             krw_bal = self.get_balance("KRW")
+            if not isinstance(krw_bal, (int, float)):
+                krw_bal = 0
             
             # Balances
             balances = self.get_balances()
             
+            # API 응답 유효성 검사
+            if not isinstance(balances, list):
+                LOGGER.warning(f"Balances API 응답 이상: {type(balances)}")
+                return float(krw_bal) if krw_bal else 0
+            
             total_coin_val = 0
             for b in balances:
-                if b['currency'] == 'KRW': continue
+                # 각 항목이 dict인지 확인
+                if not isinstance(b, dict):
+                    continue
+                if b.get('currency') == 'KRW': 
+                    continue
                 
-                ticker = f"KRW-{b['currency']}"
-                qty = float(b['balance']) + float(b['locked'])
-                avg = float(b['avg_buy_price'])
+                ticker = f"KRW-{b.get('currency', '')}"
+                try:
+                    qty = float(b.get('balance', 0)) + float(b.get('locked', 0))
+                    avg = float(b.get('avg_buy_price', 0))
+                except (ValueError, TypeError):
+                    continue
+                    
                 if qty * avg < 1000: continue # Dust skip
                 
                 # Use current price if possible, else use avg (fallback)
                 price = self.get_current_price(ticker)
-                if price:
+                if price and isinstance(price, (int, float)):
                     total_coin_val += qty * price
                 else:
                     total_coin_val += qty * avg
             
-            return krw_bal + total_coin_val
+            return float(krw_bal) + total_coin_val
         except Exception as e:
             LOGGER.error(f"Equity 계산 에러: {e}")
             return 0 

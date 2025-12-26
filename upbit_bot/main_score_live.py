@@ -115,12 +115,24 @@ def main():
         LOGGER.info("Restoring positions from Upbit...")
         try:
             my_balances = wrapper.get_balances()
+            # API 응답 유효성 검사
+            if not isinstance(my_balances, list):
+                LOGGER.warning(f"Balances API 응답 이상: {type(my_balances)}")
+                my_balances = []
+            
             for bal in my_balances:
-                if bal['currency'] == "KRW": continue
-                ticker = f"KRW-{bal['currency']}"
+                # dict 타입 검사
+                if not isinstance(bal, dict):
+                    continue
+                if bal.get('currency') == "KRW": 
+                    continue
+                ticker = f"KRW-{bal.get('currency', '')}"
                 if ticker in markets:
-                    amount = float(bal['balance'])
-                    avg = float(bal['avg_buy_price'])
+                    try:
+                        amount = float(bal.get('balance', 0))
+                        avg = float(bal.get('avg_buy_price', 0))
+                    except (ValueError, TypeError):
+                        continue
                     if amount * avg < 5000: continue
                     
                     df = wrapper.get_ohlcv(ticker, interval=timeframe, count=20)
