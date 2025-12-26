@@ -29,7 +29,16 @@ class UpbitAPIWrapper:
         """Get All Balances with details"""
         LIMITER.wait()
         try:
-            return self.upbit.get_balances()
+            result = self.upbit.get_balances()
+            # API 에러 응답 처리 (dict with 'error' key or non-list)
+            if isinstance(result, dict):
+                if 'error' in result:
+                    LOGGER.error(f"Upbit API Error: {result.get('error')}")
+                return []
+            if not isinstance(result, list):
+                LOGGER.warning(f"Unexpected balances type: {type(result)}")
+                return []
+            return result
         except Exception as e:
              LOGGER.error(f"Get All Balances Error: {e}")
              return []
