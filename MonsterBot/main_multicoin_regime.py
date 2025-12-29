@@ -59,7 +59,7 @@ if not logger.handlers:
 # Import core modules
 from core.executor import FuturesExecutor
 from core.database import TradeDB
-from core.notifier import TelegramNotifier
+from core.notifier import TelegramBot
 from core.regime_detector import RegimeDetector, MARKET_GATE_PANIC, MARKET_GATE_RISKOFF
 from core.candidate_scorer import CandidateScorer
 from core.portfolio_manager import PortfolioManager
@@ -80,7 +80,7 @@ def main():
     
     executor = FuturesExecutor(config)
     db = TradeDB()
-    noti = TelegramNotifier(config)
+    noti = TelegramBot(config)
     
     regime_detector = RegimeDetector(config)
     candidate_scorer = CandidateScorer(config)
