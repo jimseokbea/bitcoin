@@ -58,7 +58,7 @@ if not logger.handlers:
 
 # Import core modules
 from core.executor import FuturesExecutor
-from core.database import TradeDatabase
+from core.database import TradeDB
 from core.notifier import TelegramNotifier
 from core.regime_detector import RegimeDetector, MARKET_GATE_PANIC, MARKET_GATE_RISKOFF
 from core.candidate_scorer import CandidateScorer
@@ -79,7 +79,7 @@ def main():
         logger.warning("⚠️ DRY RUN MODE - No real trades will be executed")
     
     executor = FuturesExecutor(config)
-    db = TradeDatabase()
+    db = TradeDB()
     noti = TelegramNotifier(config)
     
     regime_detector = RegimeDetector(config)
