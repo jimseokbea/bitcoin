@@ -9,6 +9,14 @@ system:
   safe_mode: true
 
 # ============================================================
+# RISK: Legacy section for executor.py compatibility
+# ============================================================
+risk:
+  risk_per_trade: 0.0035     # 0.35%
+  max_leverage: 3
+  max_daily_loss: 0.02       # 2%
+
+# ============================================================
 # UNIVERSE: Coin Selection Filter (Safeguard D)
 # ============================================================
 universe:
