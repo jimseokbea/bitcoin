@@ -5,11 +5,24 @@ logger = get_logger()
 
 class RiskManager:
     def __init__(self, config):
-        self.max_daily_loss = config['risk']['max_daily_loss']
+        self.max_daily_loss = config.get('risk', {}).get('max_daily_loss', 0.015)
         self.daily_start_equity = None
         self.last_reset_day = datetime.now().day
         self.daily_trade_count = 0
-        logger.info("🛡️ Risk Manager Initialized (Daily Limit & BTC Fuse Ready)")
+        
+        # Regime-based risk config
+        portfolio_cfg = config.get('portfolio_risk', {})
+        self.daily_loss_limit_pct = portfolio_cfg.get('daily_loss_limit_pct', 2.0) / 100
+        self.max_consecutive_losses = portfolio_cfg.get('max_consecutive_losses', 3)
+        self.cooldown_bars = portfolio_cfg.get('cooldown_bars', 6)
+        
+        # Consecutive loss tracking (Safeguard G)
+        self.consecutive_losses = 0
+        self.cooldown_until_bar = 0
+        self.current_bar_count = 0
+        
+        logger.info(f"🛡️ Risk Manager Initialized (Daily: {self.daily_loss_limit_pct*100}%, "
+                   f"MaxLoss: {self.max_consecutive_losses}, Cooldown: {self.cooldown_bars})")
 
     def check_daily_limit(self, executor):
         """
@@ -53,6 +66,58 @@ class RiskManager:
     def increment_trade_count(self):
         self.daily_trade_count += 1
         logger.info(f"🔢 Daily Trade Count Updated: {self.daily_trade_count}")
+    
+    # ============================================================
+    # Consecutive Loss & Cooldown (Safeguard G)
+    # ============================================================
+    
+    def record_trade_result(self, pnl: float):
+        """Record trade result for consecutive loss tracking."""
+        if pnl < 0:
+            self.consecutive_losses += 1
+            logger.info(f"📉 Loss recorded: consecutive={self.consecutive_losses}")
+            
+            if self.consecutive_losses >= self.max_consecutive_losses:
+                self.activate_cooldown()
+        else:
+            self.consecutive_losses = 0
+            logger.info(f"📈 Win recorded: consecutive losses reset")
+    
+    def activate_cooldown(self):
+        """Activate cooldown period after consecutive losses."""
+        self.cooldown_until_bar = self.current_bar_count + self.cooldown_bars
+        logger.warning(f"⏸️ Cooldown activated: {self.cooldown_bars} bars until bar #{self.cooldown_until_bar}")
+    
+    def check_cooldown(self) -> bool:
+        """Check if in cooldown period. Returns True if trading allowed."""
+        if self.current_bar_count < self.cooldown_until_bar:
+            remaining = self.cooldown_until_bar - self.current_bar_count
+            logger.info(f"⏳ Cooldown: {remaining} bars remaining")
+            return False
+        return True
+    
+    def increment_bar_count(self):
+        """Increment bar counter for cooldown tracking."""
+        self.current_bar_count += 1
+    
+    def is_trading_allowed(self, current_equity: float) -> tuple:
+        """
+        Check all trading conditions.
+        Returns: (allowed, reason)
+        """
+        # Check daily loss limit (using regime config if available)
+        if self.daily_start_equity and self.daily_start_equity > 0:
+            pnl_pct = (current_equity - self.daily_start_equity) / self.daily_start_equity
+            if pnl_pct < -self.daily_loss_limit_pct:
+                return False, f"daily_loss({pnl_pct*100:.1f}%)"
+        
+        # Check cooldown
+        if not self.check_cooldown():
+            remaining = self.cooldown_until_bar - self.current_bar_count
+            return False, f"cooldown({remaining}_bars)"
+        
+        return True, "ok"
+
 
     def check_btc_crash(self, executor):
         """

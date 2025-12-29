@@ -1,0 +1,266 @@
+# Multi-Coin 1h Regime Trading System Configuration
+# MonsterBot - Binance Futures
+
+system:
+  timezone: "Asia/Seoul"
+  dry_run: true              # 반드시 2-3일 관찰 후 false로 전환
+  testnet: false
+  log_level: "INFO"
+  safe_mode: true
+
+# ============================================================
+# UNIVERSE: Coin Selection Filter (Safeguard D)
+# ============================================================
+universe:
+  contract_type: "USDT-PERP"
+  top_quote_volume_rank: 50
+  exclude_if_atr_pct_gt: 4.5   # ATR% 극단 코인 제외
+  spread_filter: true
+  max_spread_pct: 0.1          # 0.1% 이상 스프레드 제외
+  funding_filter: true
+  max_funding_rate: 0.0003     # |funding| > 0.03%/8h 제외
+  
+  whitelist:
+    - "BTC/USDT"
+    - "ETH/USDT"
+    - "SOL/USDT"
+    - "BNB/USDT"
+    - "XRP/USDT"
+    - "ADA/USDT"
+    - "AVAX/USDT"
+    - "LINK/USDT"
+    - "DOGE/USDT"
+    - "SUI/USDT"
+    - "APT/USDT"
+    - "NEAR/USDT"
+    - "ARB/USDT"
+    - "OP/USDT"
+    - "FET/USDT"
+    - "RENDER/USDT"
+    
+  blacklist:
+    - "USDC/USDT"
+    - "BUSD/USDT"
+
+# ============================================================
+# REGIME DETECTOR: 2-Tier Structure (Safeguard A, C)
+# ============================================================
+regime_detector:
+  adx:
+    period: 14
+    trend_on: 23
+    trend_off: 19
+  
+  atr:
+    period: 14
+    # Default thresholds
+    high_vol_on: 1.6
+    high_vol_off: 1.2
+    # Major coins (BTC/ETH) - lower variance (Safeguard C)
+    major_high_vol_on: 1.4
+    major_high_vol_off: 1.0
+    # Alt coins - higher variance expected (Safeguard C)
+    alt_high_vol_on: 2.0
+    alt_high_vol_off: 1.5
+  
+  trend_direction:
+    ema_fast: 50
+    ema_slow: 200
+    slope_lookback: 5
+  
+  stabilization:
+    confirm_bars: 2
+    min_hold_bars: 6
+    panic_override:
+      enable: true
+      regime: "DOWNTREND_HIGHVOL"
+      confirm_bars: 1      # 방어 우선
+
+# ============================================================
+# PORTFOLIO RISK: Global Position Management (Safeguard B, E, G)
+# ============================================================
+portfolio_risk:
+  risk_per_trade_pct: 0.35     # 0.35% per trade
+  daily_loss_limit_pct: 2.0    # 2.0% 도달 시 당일 거래 중단 (Safeguard G)
+  max_consecutive_losses: 3    # 3연패 시 쿨다운 (Safeguard G)
+  cooldown_bars: 6             # 6시간 쿨다운
+  
+  margin_mode: "isolated"
+  leverage_default: 3
+  leverage_caps:
+    LOWVOL: 5
+    HIGHVOL: 3
+    PANIC: 2
+  
+  # Position limits (필수)
+  max_positions_total: 2
+  max_longs: 2
+  max_shorts: 2
+  max_new_entries_per_bar: 1   # 시간당 1개 (Safeguard E)
+
+# ============================================================
+# MARKET GATE: BTC-Based System Protection (Safeguard B)
+# ============================================================
+market_gate:
+  proxy_symbol: "BTC/USDT"
+  
+  panic_actions:
+    on_regime: "DOWNTREND_HIGHVOL"
+    new_long_enabled: false
+    position_scale_mult: 0.5
+    max_positions_total: 1
+    leverage_cap: 2
+    # 기존 포지션에도 적용 (Safeguard B)
+    force_trailing_tighten: true
+    force_sl_tighten_mult: 0.8
+    
+  riskoff_actions:
+    on_condition: "TREND_OFF_AND_HIGHVOL"
+    max_positions_total: 1
+    position_scale_mult: 0.7
+
+# ============================================================
+# CANDIDATE SELECTION: Scoring (Safeguard D, F)
+# ============================================================
+candidate_selection:
+  top_n_candidates: 5
+  
+  scoring:
+    trend_weight: 0.35         # ADX weight
+    direction_weight: 0.25     # EMA diff weight
+    vol_suitability_weight: 0.20
+    liquidity_weight: 0.20
+  
+  overlap_penalty:
+    same_direction_if_already_2_positions: 0.5    # 50% 감점
+    btc_corr_cluster_penalty: 0.7                 # 30% 감점 (Safeguard F)
+
+# ============================================================
+# SETTINGS BY REGIME: 6-Regime Trading Parameters
+# ============================================================
+settings_by_regime:
+  RANGE_LOWVOL:
+    trade_enabled: true
+    mode: "mean_reversion_light"
+    position_scale: 0.35
+    leverage_cap: 5
+    sl_atr_mult: 0.9
+    tps:
+      - atr_mult: 0.9
+        ratio: 0.5
+      - atr_mult: 1.3
+        ratio: 0.5
+    time_stop_bars: 8
+
+  RANGE_HIGHVOL:
+    # ⚠️ 거래 OFF (손절 연타 방지 - 기대값 보존의 핵심)
+    trade_enabled: false
+    mode: "protect"
+    # 아래 값들은 디버그/수동 오버라이드 시에만 사용됨
+    # (trade_enabled: true로 수동 전환 시)
+    position_scale: 0.15       # (only used if trade_enabled turns true manually)
+    leverage_cap: 3
+    sl_atr_mult: 1.3
+    tps:
+      - atr_mult: 1.0
+        ratio: 1.0
+    time_stop_bars: 3
+
+  UPTREND_LOWVOL:
+    trade_enabled: true
+    mode: "trend_pullback"
+    position_scale: 1.0
+    leverage_cap: 5
+    sl_atr_mult: 1.1
+    be_move_atr: 0.8           # +0.8 ATR 시 BE 이동
+    tps:
+      - atr_mult: 1.3
+        ratio: 0.5
+    trailing:
+      enabled: true
+      atr_mult: 1.2
+
+  UPTREND_HIGHVOL:
+    trade_enabled: true
+    mode: "breakout_trend"
+    position_scale: 0.65
+    leverage_cap: 3
+    sl_atr_mult: 1.6
+    tps:
+      - atr_mult: 1.6
+        ratio: 0.5
+      - atr_mult: 2.6
+        ratio: 0.25
+    trailing:
+      enabled: true
+      atr_mult: 1.4
+    shock_rule:
+      enabled: true
+      action: "reduce_50_on_big_bear_candle"
+
+  DOWNTREND_LOWVOL:
+    trade_enabled: true
+    mode: "trend_pullback_short"
+    position_scale: 0.75
+    leverage_cap: 5
+    sl_atr_mult: 1.2
+    tps:
+      - atr_mult: 1.3
+        ratio: 0.6
+    trailing:
+      enabled: true
+      atr_mult: 1.2
+
+  DOWNTREND_HIGHVOL:
+    trade_enabled: true
+    mode: "panic_defense_or_momentum_short"
+    position_scale: 0.35
+    leverage_cap: 2
+    sl_atr_mult: 1.9
+    tps:
+      - atr_mult: 1.4
+        ratio: 0.7
+    trailing:
+      enabled: true
+      atr_mult: 1.0
+    exit_on_big_bull_candle: true
+
+# ============================================================
+# STRATEGY: Entry Conditions by Mode
+# ============================================================
+strategy:
+  timeframe: "1h"
+  rsi_period: 14
+  rsi_oversold: 30
+  rsi_overbought: 70
+  bb_len: 20
+  bb_std: 2.0
+  
+  # Mode-specific entry logic
+  mean_reversion_light:
+    rsi_threshold: 32
+    bb_bounce_confirm: true
+    
+  trend_pullback:
+    ema_zone: [20, 50]         # EMA20~EMA50 구간 되돌림
+    bounce_confirm_bars: 1
+    
+  breakout_trend:
+    volume_confirm: true
+    bb_width_expand: true
+
+# ============================================================
+# EXIT: SL/TP/Trailing Configuration
+# ============================================================
+exit:
+  time_cut:
+    enabled: true
+    mode: "candles"
+    max_candles: 6             # 1h * 6 = 6시간
+
+# ============================================================
+# TELEGRAM NOTIFICATIONS
+# ============================================================
+telegram:
+  token: ""
+  chat_id: ""
