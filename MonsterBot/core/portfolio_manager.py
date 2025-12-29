@@ -121,7 +121,7 @@ class PortfolioManager:
     
     def check_daily_loss_limit(self, current_equity: float) -> Tuple[bool, str]:
         """Check if daily loss limit is reached (Safeguard G)."""
-        if self._daily_start_equity is None:
+        if self._daily_start_equity is None or self._daily_start_equity <= 0:
             return True, "ok"
         
         pnl_pct = (current_equity - self._daily_start_equity) / self._daily_start_equity
