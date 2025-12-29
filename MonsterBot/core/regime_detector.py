@@ -191,7 +191,14 @@ class RegimeDetector:
         
         # Save flags for hysteresis
         if symbol not in self._regime_state:
-            self._regime_state[symbol] = {}
+            self._regime_state[symbol] = {
+                'current_regime': REGIME_RANGE_LOWVOL,  # Default
+                'pending_regime': None,
+                'confirm_count': 0,
+                'hold_count': 0,
+                'trend_flag': False,
+                'high_vol_flag': False
+            }
         self._regime_state[symbol]['trend_flag'] = trend_on
         self._regime_state[symbol]['high_vol_flag'] = high_vol
         
